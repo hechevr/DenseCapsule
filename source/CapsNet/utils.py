@@ -26,7 +26,7 @@ def load_mnist(batch_size, is_training=True):
         num_val_batch = 5000 // batch_size
 
         # return trX, trY, num_tr_batch, valX, valY, num_val_batch
-        return trX, trY
+        return trX, trY, valX, valY
     else:
         fd = open(os.path.join(path, 't10k-images-idx3-ubyte'))
         loaded = np.fromfile(file=fd, dtype=np.uint8)
@@ -38,7 +38,7 @@ def load_mnist(batch_size, is_training=True):
 
         num_te_batch = 10000 // batch_size
         # return teX / 255., teY, num_te_batch
-        return teX, teY
+        return teX / 255.0, teY
 
 
 def load_fashion_mnist(batch_size, is_training=True):

@@ -1,6 +1,7 @@
 import os
 import sys
 import numpy as np
+import random
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tqdm import tqdm
@@ -11,9 +12,9 @@ from utils import shuffle
 
 from capsLayer import CapsLayer
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-epoch_size = 200000
+epoch_size = 1000
 batch_size = 128
 data_shape = (28, 28)
 channel = 1
@@ -38,7 +39,8 @@ v_length = tf.sqrt(tf.reduce_sum(tf.square(capsLayer2), axis=2, keepdims=True) +
 softmax_v = tf.nn.softmax(v_length, axis=1)
 # softmax_v = [batch_size, 10, 1, 1]
 argmax_idx = tf.reshape(tf.to_int32(tf.argmax(softmax_v, axis=1)), shape=(batch_size, ))
-# argmax_idx = [batch_size, 10]
+print(argmax_idx)
+# argmax_idx = [batch_size, 1]
 
 masked_v = []
 for batch in range(batch_size):
@@ -90,7 +92,7 @@ def train(model_dir, sample_dir):
 
     model_name = 'model_'
 
-    input_x, input_y = load_data('mnist', batch_size)
+    input_x, input_y, validation_x, validation_y = load_data('mnist', batch_size)
 
     with tf.Session(config=tf.ConfigProto()) as sess:
 
@@ -109,7 +111,7 @@ def train(model_dir, sample_dir):
             train_X = input_x[start_position*batch_size : (start_position+1)*batch_size]
             train_Y = input_y[start_position*batch_size : (start_position+1)*batch_size]
 
-            if (epoch % 50 == 0):
+            if (epoch % 10 == 0):
                 _, loss, train_acc = sess.run([train_op, total_loss, train_accuracy], feed_dict={X:train_X, label:train_Y})
 
                 print('Train [%d / %d]: accuracy %.4f, loss %.4f' % (epoch, epoch_size, train_acc, loss))
@@ -117,13 +119,19 @@ def train(model_dir, sample_dir):
                 sess.run(train_op, feed_dict={X:train_X, label:train_Y})
 
             # save model and sample result
-            if (epoch % 1000 == 0):
+            if (epoch % 20 == 0):
                 samples = sess.run([decoded], feed_dict={X:train_X, label:train_Y})
+                pos = int(random.random() * 5)
+                validate_label = sess.run(argmax_idx, feed_dict={X:validation_x[pos*batch_size:(pos+1)*batch_size]})
+
+                validate_acc = 1.0 * np.sum(validate_label == validation_y[pos*batch_size:(pos+1)*batch_size]) / 128
+                print(validate_label[0:5])
+                print(validation_y[pos*batch_size:pos*batch_size+5])
 
                 save_images(np.reshape(samples, (batch_size, 28, 28))[0:100], [10, 10], os.path.join(sample_dir, 'sample_'+str(epoch)+'.png'))
                 save_images(np.reshape(train_X, (batch_size, 28, 28))[0:100], [10, 10], os.path.join(sample_dir, 'input_'+str(epoch)+'.png'))
                 saver.save(sess, './model/' + model_name + str(epoch) + '.ckpt')
-                print("Save model and sample images")
+                print("Save model and sample images, val acc: %.4f" % validate_acc)
             
 
 def test(model_dir, out_dir):
@@ -139,33 +147,24 @@ def test(model_dir, out_dir):
             finish()
 
         test_X, test_Y = load_data('mnist', batch_size, is_training=False)
-        
-        predict_label, samples = sess.run([argmax_idx, decoded], feed_dict={X:test_X[0:128]})
-        accuracy = 1.0 * np.sum(predict_label[0:128] == test_Y[0:128]) / 128
 
-        save_images(np.reshape(samples[0:100], (100, 28, 28)), [10, 10], os.path.join(out_dir, 'test.png'))
-        save_images(np.reshape(test_X[0:100], (100, 28, 28)), [10, 10], os.path.join(out_dir, 'input.png'))
+        iteration_number = test_X.shape[0] // batch_size
+        print(iteration_number)
+
+        correct_num = 0
+        total_num = iteration_number * batch_size
+
+        for itr in range(iteration_number):
+            predict_label, samples = sess.run([argmax_idx, decoded], feed_dict={X:test_X[itr*batch_size:(itr+1)*batch_size]})
+            correct_num += np.sum(predict_label == test_Y[itr*batch_size:(itr+1)*batch_size])
+            if (itr == 1):
+                save_images(np.reshape(samples[0:100], (100, 28, 28)), [10, 10], os.path.join(out_dir, 'test.png'))
+                save_images(np.reshape(test_X[0:100], (100, 28, 28)), [10, 10], os.path.join(out_dir, 'input.png'))
+
+        accuracy = 1.0 * correct_num / total_num
+
         print('accuracy: %.6f' % accuracy)
 
-"""
-def evaluation(model, supervisor, num_label):
-    teX, teY, num_te_batch = load_data(cfg.dataset, cfg.batch_size, is_training=False)
-    fd_test_acc = save_to()
-    with supervisor.managed_session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
-        supervisor.saver.restore(sess, tf.train.latest_checkpoint(cfg.logdir))
-        tf.logging.info('Model restored!')
-
-        test_acc = 0
-        for i in tqdm(range(num_te_batch), total=num_te_batch, ncols=70, leave=False, unit='b'):
-            start = i * cfg.batch_size
-            end = start + cfg.batch_size
-            acc = sess.run(model.accuracy, {model.X: teX[start:end], model.labels: teY[start:end]})
-            test_acc += acc
-        test_acc = test_acc / (cfg.batch_size * num_te_batch)
-        fd_test_acc.write(str(test_acc))
-        fd_test_acc.close()
-        print('Test accuracy has been saved to ' + cfg.results + '/test_acc.csv')
-"""
 
 def main(_):
 

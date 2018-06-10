@@ -27,14 +27,90 @@ class CapsLayer(object):
             input_caps_num = input.shape[1].value
             input_vec_len = input.shape[2].value
 
+
             with tf.variable_scope('routing'):
-                b_IJ = tf.constant(np.zeros([batch_size, input_caps_num, num_outputs, 1, 1], dtype=np.float32))
-                capsules = routing(tf.reshape(input, shape=(batch_size, -1, 1, input_vec_len, 1)), b_IJ)
+                # b_IJ = tf.constant(np.zeros([batch_size, input_caps_num, num_outputs, 1, 1], dtype=np.float32))
+                # capsules = routing(tf.reshape(input, shape=(batch_size, -1, 1, input_vec_len, 1)), b_IJ)
                 # capsules = [batch_size, num_outputs, vec_len, 1]
+                capsules = routing(input, 10, 16)
 
             return tf.squeeze(capsules, axis=1)
 
-def routing(input, b_IJ):
+def routing(input, out_caps_num, out_vec_len):
+    """ The routing algorithm.
+    Args:
+        input: capsules with [batch_size, caps_num, vec_len, 1]
+        out_caps_num: the number of output capsules
+        out_vec_len: the vector length of output capsules (defaule vec_len)
+    output:
+        out_capsules: capsules with [batch_size, out_caps_num, out_vec_len]
+    """
+    iter_routing = 3
+    in_shape = input.get_shape()
+    # in_shape = [batch_size, caps_num, vec_len, 1]
+
+    W = tf.get_variable('Weight', shape=(1, in_shape[1], out_caps_num*out_vec_len, in_shape[2]))
+    # W = [1, caps_num, out_caps_num * out_vec_len, vec_len, 1]
+
+    biases = tf.get_variable('bias', shape=(1, 1, out_caps_num, out_vec_len))
+    # biases = [1, 1, out_caps_num, out_vec_len]
+
+    W = tf.tile(W, [in_shape[0], 1, 1, 1])
+
+    # u_hat = Wij * u
+    u_hat = tf.matmul(W, input)
+    # u_hat = [batch_size,  caps_num, out_caps_num * out_vec_len, 1]
+
+    u_hat = tf.reshape(u_hat, shape=(in_shape[0], in_shape[1], out_caps_num, out_vec_len))
+    # u_hat = [batch_size, caps_num, out_caps_num, out_vec_len]
+
+    u_hat_stopped = tf.stop_gradient(u_hat, name='stop_gradient')
+
+    b_IJ = tf.constant(np.zeros([in_shape[0], in_shape[1], out_caps_num, 1], dtype=np.float32))
+    # b_IJ = [batch_size, caps_num, out_caps_num, 1]
+    for r_iter in range(iter_routing):
+        with tf.variable_scope('iter_' + str(r_iter)):
+
+            if r_iter == iter_routing - 1:
+                c_IJ = tf.nn.softmax(b_IJ, axis=2)
+                # c_IJ = [batch_size, caps_num, out_caps_num, 1]
+
+                s_j = tf.multiply(c_IJ, u_hat)
+                # s_j = [batch_size, caps_num, out_caps_num, out_vec_len]
+
+                s_j = tf.reduce_sum(s_j, axis=1, keepdims=True) + biases
+                # not clear, paper does not mention biases
+                # s_j = [batch_size, 1, out_caps_num, out_vec_len]
+
+                v_j = squash(s_j)
+                # v_j = [batch_size, 1, out_caps_num, out_vec_len]
+            else:
+                c_IJ = tf.nn.softmax(b_IJ, axis=2)
+                # c_IJ = [batch_size, caps_num, out_caps_num, 1]
+
+                s_j = tf.multiply(c_IJ, u_hat_stopped)
+                # s_j = [batch_size, caps_num, out_caps_num, out_vec_len]
+
+                s_j = tf.reduce_sum(s_j, axis=1, keepdims=True) + biases
+                # not clear, paper does not mention biases
+                # s_j = [batch_size, 1, out_caps_num, out_vec_len]
+
+                v_j = squash(s_j)
+                # v_j = [batch_size, 1, out_caps_num, out_vec_len]
+
+                # bij = bij + u_hat * vj
+                v_J_tiled = tf.tile(v_j, [1, in_shape[1], 1, 1])
+                # v_j_tiled = [batch_size, caps_num, out_caps_num, out_vec_len]
+
+                u_produce_v = tf.reduce_sum(u_hat_stopped * v_J_tiled, axis=3, keepdims=True)
+                # u_produce_v = [batch_size, caps_num, out_caps_num, 1]
+
+                # b_IJ += tf.reduce_sum(u_produce_v, axis=0, keep_dims=True)
+                b_IJ += u_produce_v
+
+    return v_j
+
+def routing_old(input, b_IJ):
 
     iter_routing = 3
     batch_size = input.get_shape()[0]

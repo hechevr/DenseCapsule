@@ -12,7 +12,7 @@ from utils import shuffle
 
 from capsLayer import CapsLayer
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 epoch_size = 1000
 batch_size = 128
@@ -124,7 +124,7 @@ def train(model_dir, sample_dir):
                 pos = int(random.random() * 5)
                 validate_label = sess.run(argmax_idx, feed_dict={X:validation_x[pos*batch_size:(pos+1)*batch_size]})
 
-                validate_acc = 1.0 * np.sum(validate_label == validation_y[pos*batch_size:(pos+1)*batch_size]) / 128
+                validate_acc = 1.0 * np.sum(validate_label == validation_y[pos*batch_size:(pos+1)*batch_size]) / batch_size
                 print(validate_label[0:5])
                 print(validation_y[pos*batch_size:pos*batch_size+5])
 
@@ -157,7 +157,7 @@ def test(model_dir, out_dir):
         for itr in range(iteration_number):
             predict_label, samples = sess.run([argmax_idx, decoded], feed_dict={X:test_X[itr*batch_size:(itr+1)*batch_size]})
             correct_num += np.sum(predict_label == test_Y[itr*batch_size:(itr+1)*batch_size])
-            if (itr == 1):
+            if (itr == 0):
                 save_images(np.reshape(samples[0:100], (100, 28, 28)), [10, 10], os.path.join(out_dir, 'test.png'))
                 save_images(np.reshape(test_X[0:100], (100, 28, 28)), [10, 10], os.path.join(out_dir, 'input.png'))
 

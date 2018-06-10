@@ -14,10 +14,12 @@ from capsLayer import CapsLayer
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
-epoch_size = 1000
+epoch_size = 100000
 batch_size = 128
 data_shape = (28, 28)
 channel = 1
+
+dataset_name = 'mnist'
 
 X = tf.placeholder(tf.float32, shape=(batch_size, data_shape[0], data_shape[1], channel))
 label = tf.placeholder(tf.uint8, shape=(batch_size, ))
@@ -67,7 +69,7 @@ with tf.variable_scope('Decoder'):
 m_plus = 0.9
 m_minus = 0.1
 lam = 0.5
-regularization_scale = 0.0005
+regularization_scale = 0.392
 
 max_l = tf.square(tf.maximum(0.0, m_plus-v_length))
 max_r = tf.square(tf.maximum(0.0, v_length-m_minus))
@@ -80,7 +82,7 @@ rec_loss = tf.reduce_mean(tf.square(decoded - tf.reshape(X, shape=(batch_size, -
 
 total_loss = margin_loss + regularization_scale * rec_loss
 
-train_op = tf.train.AdamOptimizer().minimize(total_loss)
+train_op = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(total_loss)
 init = tf.global_variables_initializer()
 
 correct_prediction = tf.equal(tf.to_int32(label), argmax_idx)
@@ -92,11 +94,20 @@ def train(model_dir, sample_dir):
 
     model_name = 'model_'
 
-    input_x, input_y, validation_x, validation_y = load_data('mnist', batch_size)
+    input_x, input_y, validation_x, validation_y = load_data(dataset_name, batch_size)
 
     with tf.Session(config=tf.ConfigProto()) as sess:
 
         sess.run(init)
+
+        ckpt = tf.train.get_checkpoint_state(model_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            print("[*] restore model : %s"%ckpt_name)
+            saver.restore(sess, os.path.join(model_dir, ckpt_name))
+        else:
+            print("model does not exits")
+
         print('============ Start training ==============')
 
         iteration_number = input_x.shape[0] // batch_size
@@ -120,18 +131,24 @@ def train(model_dir, sample_dir):
 
             # save model and sample result
             if (epoch % 20 == 0):
-                samples = sess.run([decoded], feed_dict={X:train_X, label:train_Y})
-                pos = int(random.random() * 5)
-                validate_label = sess.run(argmax_idx, feed_dict={X:validation_x[pos*batch_size:(pos+1)*batch_size]})
+                
+                # evaluate
+                iter_num = validation_x[1:1000].shape[0] // batch_size
+                acc = 0.0
+                for itr in range(iter_num):
+                    samples = sess.run([decoded], feed_dict={X:train_X, label:train_Y})
+                    # pos = int(random.random() * 5)
+                    pos = itr
+                    validate_label = sess.run(argmax_idx, feed_dict={X:validation_x[pos*batch_size:(pos+1)*batch_size]})
 
-                validate_acc = 1.0 * np.sum(validate_label == validation_y[pos*batch_size:(pos+1)*batch_size]) / batch_size
-                print(validate_label[0:5])
-                print(validation_y[pos*batch_size:pos*batch_size+5])
+                    validate_acc = 1.0 * np.sum(validate_label == validation_y[pos*batch_size:(pos+1)*batch_size]) / batch_size
+                    acc += validate_acc
 
+                acc = acc / iter_num
                 save_images(np.reshape(samples, (batch_size, 28, 28))[0:100], [10, 10], os.path.join(sample_dir, 'sample_'+str(epoch)+'.png'))
                 save_images(np.reshape(train_X, (batch_size, 28, 28))[0:100], [10, 10], os.path.join(sample_dir, 'input_'+str(epoch)+'.png'))
                 saver.save(sess, './model/' + model_name + str(epoch) + '.ckpt')
-                print("Save model and sample images, val acc: %.4f" % validate_acc)
+                print("Save model and sample images, val acc: %.4f" % acc)
             
 
 def test(model_dir, out_dir):
@@ -146,7 +163,7 @@ def test(model_dir, out_dir):
             print("model does not exits")
             finish()
 
-        test_X, test_Y = load_data('mnist', batch_size, is_training=False)
+        test_X, test_Y = load_data(dataset_name, batch_size, is_training=False)
 
         iteration_number = test_X.shape[0] // batch_size
         print(iteration_number)

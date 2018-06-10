@@ -42,7 +42,7 @@ def load_mnist(batch_size, is_training=True):
 
 
 def load_fashion_mnist(batch_size, is_training=True):
-    path = os.path.join('data', 'fashion-mnist')
+    path = 'fashion_mnist'
     if is_training:
         fd = open(os.path.join(path, 'train-images-idx3-ubyte'))
         loaded = np.fromfile(file=fd, dtype=np.uint8)
@@ -61,7 +61,7 @@ def load_fashion_mnist(batch_size, is_training=True):
         num_tr_batch = 55000 // batch_size
         num_val_batch = 5000 // batch_size
 
-        return trX, trY, num_tr_batch, valX, valY, num_val_batch
+        return trX, trY, valX, valY
     else:
         fd = open(os.path.join(path, 't10k-images-idx3-ubyte'))
         loaded = np.fromfile(file=fd, dtype=np.uint8)
@@ -72,13 +72,13 @@ def load_fashion_mnist(batch_size, is_training=True):
         teY = loaded[8:].reshape((10000)).astype(np.int32)
 
         num_te_batch = 10000 // batch_size
-        return teX / 255., teY, num_te_batch
+        return teX / 255., teY
 
 
 def load_data(dataset, batch_size, is_training=True, one_hot=False):
     if dataset == 'mnist':
         return load_mnist(batch_size, is_training)
-    elif dataset == 'fashion-mnist':
+    elif dataset == 'fashion_mnist':
         return load_fashion_mnist(batch_size, is_training)
     else:
         raise Exception('Invalid dataset, please check the name of dataset:', dataset)
@@ -87,7 +87,7 @@ def load_data(dataset, batch_size, is_training=True, one_hot=False):
 def get_batch_data(dataset, batch_size, num_threads):
     if dataset == 'mnist':
         trX, trY, num_tr_batch, valX, valY, num_val_batch = load_mnist(batch_size, is_training=True)
-    elif dataset == 'fashion-mnist':
+    elif dataset == 'fashion_mnist':
         trX, trY, num_tr_batch, valX, valY, num_val_batch = load_fashion_mnist(batch_size, is_training=True)
     data_queues = tf.train.slice_input_producer([trX, trY])
     X, Y = tf.train.shuffle_batch(data_queues, num_threads=num_threads,

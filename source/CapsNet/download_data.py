@@ -35,11 +35,23 @@ def download_and_uncompress_zip(URL, dataset_dir, force=False):
 
 def start_download(dataset, save_to):
 
+    if (not os.path.exists(save_to)):
+        os.makedirs(save_to)
+
     if (dataset == 'mnist'):
         download_and_uncompress_zip(MNIST_TRAIN_IMGS_URL, save_to)
         download_and_uncompress_zip(MNIST_TRAIN_LABELS_URL, save_to)
         download_and_uncompress_zip(MNIST_TEST_IMGS_URL, save_to)
         download_and_uncompress_zip(MNIST_TEST_LABELS_URL, save_to)
 
+    else:
+        download_and_uncompress_zip(FASHION_MNIST_TRAIN_IMGS_URL, save_to)
+        download_and_uncompress_zip(FASHION_MNIST_TRAIN_LABELS_URL, save_to)
+        download_and_uncompress_zip(FASHION_MNIST_TEST_IMGS_URL, save_to)
+        download_and_uncompress_zip(FASHION_MNIST_TEST_LABELS_URL, save_to)
+
 if __name__ == '__main__':
-    start_download('mnist', './mnist/')
+    if sys.argv[1] == 'mnist':
+        start_download('mnist', './mnist/')
+    else:
+        start_download('fashion_mnist', './fashion_mnist/')

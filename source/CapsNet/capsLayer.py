@@ -6,14 +6,15 @@ import tensorflow.contrib.slim as slim
 
 class CapsLayer(object):
 
-    def __init__(self, layer_type='PrimaryCaps'):
+    def __init__(self, layer_type='PrimaryCaps', padding='VALID'):
+        self.padding = padding
         self.layer_type = layer_type
     
     def __call__(self, input, num_outputs=32, vec_len=8, kernel_size=9, stride=2,):
         if self.layer_type == 'PrimaryCaps':
             # input = [batch_size, 20, 20, 256]
             batch_size = input.shape[0].value
-            capsules = slim.conv2d(input, num_outputs * vec_len, kernel_size, stride, padding='VALID')
+            capsules = slim.conv2d(input, num_outputs * vec_len, kernel_size, stride, padding=self.padding)
             # capsules = [batch_size, 6, 6, 32*8]
 
             capsules = tf.reshape(capsules, (batch_size, -1, vec_len, 1))
@@ -32,7 +33,7 @@ class CapsLayer(object):
                 # b_IJ = tf.constant(np.zeros([batch_size, input_caps_num, num_outputs, 1, 1], dtype=np.float32))
                 # capsules = routing(tf.reshape(input, shape=(batch_size, -1, 1, input_vec_len, 1)), b_IJ)
                 # capsules = [batch_size, num_outputs, vec_len, 1]
-                capsules = routing(input, 10, 16)
+                capsules = routing(input, num_outputs, vec_len)
 
             return tf.squeeze(capsules, axis=1)
 
@@ -49,6 +50,24 @@ def routing(input, out_caps_num, out_vec_len):
     in_shape = input.get_shape()
     # in_shape = [batch_size, caps_num, vec_len, 1]
 
+    W = tf.get_variable('Weight', shape=(1, in_shape[1], out_caps_num*out_vec_len, in_shape[2], 1), dtype=tf.float32,
+                        initializer=tf.random_normal_initializer())
+    biases = tf.get_variable('bias', shape=(1, 1, out_caps_num, out_vec_len))
+
+    # Eq.2, calc u_hat
+    # Since tf.matmul is a time-consuming op,
+    # A better solution is using element-wise multiply, reduce_sum and reshape
+    # ops instead. Matmul [a, b] x [b, c] is equal to a series ops as
+    # element-wise multiply [a*c, b] * [a*c, b], reduce_sum at axis=1 and
+    # reshape to [a, c]
+    input = tf.reshape(input, shape=(in_shape[0], in_shape[1], 1, in_shape[2], in_shape[3]))
+
+    input = tf.tile(input, [1, 1, out_caps_num * out_vec_len, 1, 1])
+
+    u_hat = tf.reduce_sum(W * input, axis=3, keepdims=True)
+    u_hat = tf.reshape(u_hat, shape=[in_shape[0], in_shape[1], out_caps_num, out_vec_len])
+
+    """
     W = tf.get_variable('Weight', shape=(1, in_shape[1], out_caps_num*out_vec_len, in_shape[2]))
     # W = [1, caps_num, out_caps_num * out_vec_len, vec_len, 1]
 
@@ -63,6 +82,7 @@ def routing(input, out_caps_num, out_vec_len):
 
     u_hat = tf.reshape(u_hat, shape=(in_shape[0], in_shape[1], out_caps_num, out_vec_len))
     # u_hat = [batch_size, caps_num, out_caps_num, out_vec_len]
+    """
 
     u_hat_stopped = tf.stop_gradient(u_hat, name='stop_gradient')
 
